@@ -14,7 +14,7 @@ setup(
     description='A tool to tail Graylog logs.',
     long_description=readme,
     author='Brandon Vargo',
-    url='https://github.com/demonus/gtail.git',
+    url='https://github.com/bvargo/gtail',
     packages=find_packages(),
     include_package_data=True,
     install_requires=install_requires,

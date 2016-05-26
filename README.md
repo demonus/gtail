@@ -44,6 +44,12 @@ This will display only selected fields.
 
 Choose between comma separated values map and JSON output.
 
+### Initial range
+
+`gtail --range [interval]`
+
+Time range for initial fetch. Use "h" for hours, "m" for minutes, "s" or no identifier for seconds.
+
 ### Full usage instructions
 
 `gtail --help`

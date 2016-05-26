@@ -15,7 +15,26 @@ import urllib
 from json import dumps
 
 MAX_DELAY = 10
+DEFAULT_RANGE="5m"
 DEFAULT_CONFIG_PATHS = [".gtail", os.path.expanduser("~/.gtail")]
+
+# converts human readable time interval into seconds
+def convert_time_interval(value):
+    value = value.lower()
+    value_int = 0
+    if "h" in value:
+        value_parts = value.split("h", 1)
+        value_int+=int(value_parts[0])*3600
+        value=value_parts[1]
+    if "m" in value:
+        value_parts = value.split("m", 1)
+        value_int += int(value_parts[0]) * 60
+        value = value_parts[1]
+    value_parts = value.split("s", 1)
+    if value_parts[0] == "":
+        value_parts[0] = "0"
+    value_int += int(value_parts[0])
+    return value_int
 
 # returns a bold version of text using ansi characters
 def bold(text):
@@ -63,11 +82,17 @@ def fetch_messages(server_config,
         stream_ids = None,
         last_message_id = None,
         fields = None,
-        delay = MAX_DELAY):
+        delay = MAX_DELAY,
+        initial_range = None):
     url = []
     url.append(server_config.uri)
-    range = max(delay*5, 300)
-    url.append("/search/universal/relative?range={range}&limit=1000".format(range=range))
+    if last_message_id:
+        limit = "&limit={0}".format(1000)
+        range = max(delay * 5, 300)
+    else:
+        range=initial_range
+        limit=""
+    url.append("/search/universal/relative?range={range}{limit}".format(range=range, limit=limit))
 
     # query terms
     if query:
@@ -127,10 +152,10 @@ def print_message(message, streams=None, fields=None, format="json"):
         for field in fields:
             if field != "_id" and field in message:
                 count += 1
-                s[field] = message[field]
+                s[field] = str(message[field])
     else:
         if "timestamp" in message:
-            s["timestamp"] = message["timestamp"]
+            s["timestamp"] = str(message["timestamp"])
         if streams and "streams" in message:
             stream_ids = message["streams"]
             stream_names = []
@@ -262,6 +287,9 @@ This file should be located at any of the following paths: %s.
     parser.add_argument("--delay", dest="delay",
                         type=int, default=MAX_DELAY,
                         help="Delay between Rest API calls (seconds)")
+    parser.add_argument("--range", dest="range",
+                        type=str, default=DEFAULT_RANGE,
+                        help="Time range for initial fetch")
     parser.add_argument("--config", dest="config_paths",
             nargs="+",
             help="Config files. Default: " + ", ".join(DEFAULT_CONFIG_PATHS))
@@ -327,7 +355,8 @@ This file should be located at any of the following paths: %s.
                         stream_ids = stream_ids,
                         last_message_id = last_message_id,
                         fields=fields,
-                        delay=args.delay)
+                        delay=args.delay,
+                        initial_range=convert_time_interval(args.range))
             except Exception as e:
                 print e
                 time.sleep(args.delay)

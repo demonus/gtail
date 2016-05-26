@@ -61,6 +61,21 @@ def fetch(server_config, url):
     r = requests.get(url, auth=auth, headers=headers)
     return r
 
+def count(server_config, url):
+    if server_config.username and server_config.password:
+        auth = (server_config.username, server_config.password)
+    else:
+        auth = None
+
+    headers = {"accept": "application/json"}
+    url = url.split("&limit=")[0]+"&limit=1"
+    r = requests.get(url, auth=auth, headers=headers)
+    if r.status_code !=200:
+        raise Exception("Could not get message count from server. " \
+                        "Status code: %d" % r.status_code)
+
+    return r.json()["total_results"]
+
 # gets a list of active streams
 def fetch_streams(server_config):
     r = fetch(server_config, server_config.uri + "/streams")
@@ -91,16 +106,17 @@ def fetch_messages(server_config,
         last_message_id = None,
         fields = None,
         delay = MAX_DELAY,
-        initial_range = None):
+        initial_range = None,
+        initial_limit = None):
     url = []
     url.append(server_config.uri)
+
     if last_message_id:
-        limit = "&limit={0}".format(1000)
         range = max(delay * 5, 300)
     else:
-        range=initial_range
-        limit=""
-    url.append("/search/universal/relative?range={range}{limit}".format(range=range, limit=limit))
+        range = initial_range
+
+    url.append("/search/universal/relative?range={range}".format(range=range))
 
     # query terms
     if query:
@@ -123,6 +139,17 @@ def fetch_messages(server_config,
 
     # fetch
     url = ''.join(url)
+
+    if last_message_id:
+        limit = 1000
+    else:
+        if initial_limit:
+            limit = initial_limit
+        else:
+            total = count(server_config, url)
+            limit=total
+    url += "&limit={0}".format(limit)
+
     r = fetch(server_config, url)
     if r.status_code != 200:
         raise Exception("Could not fetch messages from server. " \
@@ -298,6 +325,9 @@ This file should be located at any of the following paths: %s.
     parser.add_argument("--range", dest="range",
                         type=str, default=DEFAULT_RANGE,
                         help="Time range for initial fetch")
+    parser.add_argument("--limit", dest="limit",
+                        type=int, default=None,
+                        help="Limit for initial fetch")
     parser.add_argument("--config", dest="config_paths",
             nargs="+",
             help="Config files. Default: " + ", ".join(DEFAULT_CONFIG_PATHS))
@@ -364,7 +394,8 @@ This file should be located at any of the following paths: %s.
                         last_message_id = last_message_id,
                         fields=fields,
                         delay=args.delay,
-                        initial_range=convert_time_interval(args.range))
+                        initial_range=convert_time_interval(args.range),
+                        initial_limit=args.limit)
             except Exception as e:
                 print e
                 time.sleep(args.delay)

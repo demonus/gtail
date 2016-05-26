@@ -22,6 +22,14 @@ DEFAULT_CONFIG_PATHS = [".gtail", os.path.expanduser("~/.gtail")]
 def convert_time_interval(value):
     value = value.lower()
     value_int = 0
+    if "w" in value:
+        value_parts = value.split("w", 1)
+        value_int += int(value_parts[0]) * 3600 * 24 * 7
+        value = value_parts[1]
+    if "d" in value:
+        value_parts = value.split("d", 1)
+        value_int += int(value_parts[0]) * 3600 * 24
+        value = value_parts[1]
     if "h" in value:
         value_parts = value.split("h", 1)
         value_int+=int(value_parts[0])*3600

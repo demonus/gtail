@@ -12,6 +12,7 @@ import requests
 import sys
 import time
 import urllib
+from json import dumps
 
 MAX_DELAY = 10
 DEFAULT_CONFIG_PATHS = [".gtail", os.path.expanduser("~/.gtail")]
@@ -60,16 +61,25 @@ def list_streams(streams):
 def fetch_messages(server_config,
         query = None,
         stream_ids = None,
-        last_message_id = None):
+        last_message_id = None,
+        fields = None,
+        delay = MAX_DELAY):
     url = []
     url.append(server_config.uri)
-    url.append("/search/universal/relative?range=7200&limit=100")
+    range = max(delay*5, 300)
+    url.append("/search/universal/relative?range={range}&limit=1000".format(range=range))
 
     # query terms
     if query:
         url.append("&query=" + urllib.quote_plus(query))
     else:
         url.append("&query=*")
+
+    # fields list
+    if fields:
+        if "_id" not in fields:
+            fields.append("_id")
+        url.append("&fields=" + "%2C".join(fields))
 
     # stream ID
     if stream_ids:
@@ -109,37 +119,46 @@ def fetch_messages(server_config,
 # pretty prints a message
 # streams, if provided, is the full list of streams; it is used for pretty
 # printing of the stream name
-def print_message(message, streams=None):
-    s = []
-    if "timestamp" in message:
-        timestamp = message["timestamp"]
-        s.append(timestamp)
-    if streams and "streams" in message:
-        stream_ids = message["streams"]
-        stream_names = []
-        for sid in stream_ids:
-            stream_names.append(streams[sid]["title"])
-        s.append("[" + ", ".join(stream_names) + "]")
-    if "facility" in message:
-        facility = message["facility"]
-        s.append(facility)
-    if "level" in message:
-        level = message["level"]
-        s.append(level)
-    if "source" in message:
-        source = message["source"]
-        s.append(source)
-    if "loggerName" in message:
-        logger_name = message["loggerName"]
-        s.append(logger_name)
-
-    if "full_message" in message:
-        text = message["full_message"]
+def print_message(message, streams=None, fields=None, format="json"):
+    s = dict()
+    text = None
+    if fields:
+        count = 0
+        for field in fields:
+            if field != "_id" and field in message:
+                count += 1
+                s[field] = message[field]
     else:
-        text = message["message"]
+        if "timestamp" in message:
+            s["timestamp"] = message["timestamp"]
+        if streams and "streams" in message:
+            stream_ids = message["streams"]
+            stream_names = []
+            for sid in stream_ids:
+                stream_names.append(streams[sid]["title"])
+            s["streams"] = "[" + ", ".join(stream_names) + "]"
+        if "facility" in message:
+            s["facility"] = message["facility"]
+        if "level" in message:
+            s["level"] = message["level"]
+        if "source" in message:
+            s["source"] = message["source"]
+        if "loggerName" in message:
+            s["loggerName"] = message["loggerName"]
 
-    print bold(" ".join(map(str, s)))
-    print text
+        if "full_message" in message:
+            text = message["full_message"]
+        elif "message" in message:
+            text = message["message"]
+
+    if format == "text":
+        out = map(str, s.values())
+    else:
+        out = dumps(s)
+    print bold(out)
+
+    if text:
+        print text
 
 # config object and config parsing
 Config = namedtuple("Config", "server_config")
@@ -234,6 +253,15 @@ This file should be located at any of the following paths: %s.
     parser.add_argument("--query", dest="query",
             nargs="+",
             help="Query terms to search on")
+    parser.add_argument("--fields", dest="fields",
+                        nargs="+",
+                        help="Fields to display")
+    parser.add_argument("--format", dest="format",
+                        choices=["text", "json"], default="json",
+                        help="Display format")
+    parser.add_argument("--delay", dest="delay",
+                        type=int, default=MAX_DELAY,
+                        help="Delay between Rest API calls (seconds)")
     parser.add_argument("--config", dest="config_paths",
             nargs="+",
             help="Config files. Default: " + ", ".join(DEFAULT_CONFIG_PATHS))
@@ -280,37 +308,47 @@ This file should be located at any of the following paths: %s.
     # print log messages
     #
 
-    last_message_id = None
-    while True:
-        # time-forward messages
-        query = None
-        if args.query:
-            query = ' '.join(args.query)
-        try:
-            messages = fetch_messages(
-                    server_config = server_config,
-                    query = query,
-                    stream_ids = stream_ids,
-                    last_message_id = last_message_id)
-        except Exception as e:
-            print e
-            time.sleep(MAX_DELAY)
-            continue
+    try:
+        last_message_id = None
+        while True:
+            # time-forward messages
+            query = None
+            fields = None
+            if args.query:
+                query = ' '.join(args.query)
+            if args.fields:
+                fields = []
+                for field in args.fields:
+                  fields.extend(field.split(","))
+            try:
+                messages = fetch_messages(
+                        server_config = server_config,
+                        query = query,
+                        stream_ids = stream_ids,
+                        last_message_id = last_message_id,
+                        fields=fields,
+                        delay=args.delay)
+            except Exception as e:
+                print e
+                time.sleep(args.delay)
+                continue
 
-        # print new messages
-        last_timestamp = None
-        for m in messages:
-            print_message(m, streams)
-            last_message_id = m["_id"]
-            last_timestamp = m["timestamp"]
+            # print new messages
+            last_timestamp = None
+            for m in messages:
+                print_message(m, streams, fields=fields, format=args.format)
+                last_message_id = m["_id"]
+                last_timestamp = m["timestamp"]
 
-        if last_timestamp:
-            seconds_since_last_message = max(0, (datetime.datetime.utcnow() - last_timestamp).total_seconds())
-            delay = min(seconds_since_last_message, MAX_DELAY)
-            if delay > 2:
-                time.sleep(delay)
-        else:
-            time.sleep(MAX_DELAY)
+            if last_timestamp:
+                seconds_since_last_message = max(0, (datetime.datetime.utcnow() - last_timestamp).total_seconds())
+                delay = min(seconds_since_last_message, args.delay)
+                if delay > 2:
+                    time.sleep(delay)
+            else:
+                time.sleep(args.delay)
+    except KeyboardInterrupt:
+        os._exit(0)
 
 if __name__ == "__main__":
     rc = main()

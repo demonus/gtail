@@ -32,6 +32,18 @@ This uses Graylog's search mechanism, so you can use `field: value` syntax.
 
 `gtail --stream nile --query crocodile`
 
+### Select fields
+
+`gtail --fields comma-separated-fields-here`
+
+This will display only selected fields.
+
+### Display format
+
+`gtail --format [text or json]`
+
+Choose between comma separated values map and JSON output.
+
 ### Full usage instructions
 
 `gtail --help`

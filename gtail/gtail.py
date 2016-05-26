@@ -20,6 +20,8 @@ DEFAULT_CONFIG_PATHS = [".gtail", os.path.expanduser("~/.gtail")]
 
 # converts human readable time interval into seconds
 def convert_time_interval(value):
+    if not value:
+        return None
     value = value.lower()
     value_int = 0
     if "w" in value:
@@ -74,7 +76,8 @@ def count(server_config, url):
         raise Exception("Could not get message count from server. " \
                         "Status code: %d" % r.status_code)
 
-    return r.json()["total_results"]
+    jsn = r.json()
+    return jsn["total_results"]
 
 # gets a list of active streams
 def fetch_streams(server_config):
@@ -107,16 +110,20 @@ def fetch_messages(server_config,
         fields = None,
         delay = MAX_DELAY,
         initial_range = None,
-        initial_limit = None):
+        initial_limit = None,
+        from_date = None,
+        to_date = None):
     url = []
     url.append(server_config.uri)
 
-    if last_message_id:
-        range = max(delay * 5, 300)
+    if not from_date:
+        if last_message_id:
+            range = max(delay * 5, 300)
+        else:
+            range = initial_range
+        url.append("/search/universal/relative?range={range}".format(range=range))
     else:
-        range = initial_range
-
-    url.append("/search/universal/relative?range={range}".format(range=range))
+        url.append("/search/universal/absolute?from={from_date}&to={to_date}".format(from_date=from_date, to_date=to_date))
 
     # query terms
     if query:
@@ -288,6 +295,12 @@ def find_stream_id(stream_name, streams):
 
     return stream_ids[0]
 
+
+def check_date(value):
+    datetime.datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+    return value
+
+
 def main():
     parser = argparse.ArgumentParser(
             formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -323,16 +336,30 @@ This file should be located at any of the following paths: %s.
                         type=int, default=MAX_DELAY,
                         help="Delay between Rest API calls (seconds)")
     parser.add_argument("--range", dest="range",
-                        type=str, default=DEFAULT_RANGE,
+                        type=str,
                         help="Time range for initial fetch")
     parser.add_argument("--limit", dest="limit",
                         type=int, default=None,
                         help="Limit for initial fetch")
+    parser.add_argument("--from", dest="from_date",
+                        type=check_date,
+                        help="From date/time with format yyyy-MM-dd HH:mm:ss")
+    parser.add_argument("--to", dest="to_date",
+                        type=check_date,
+                        help="To date/timewith format yyyy-MM-dd HH:mm:ss")
+    parser.add_argument("-f", dest="tail", action='store_true', default=False,
+                        help="Tail the log")
     parser.add_argument("--config", dest="config_paths",
             nargs="+",
             help="Config files. Default: " + ", ".join(DEFAULT_CONFIG_PATHS))
     args = parser.parse_args()
 
+    if args.range and (args.from_date or args.to_date):
+        print "error: argument --range is not allowed if --from and --to are used"
+        os._exit(1)
+
+    if not args.from_date and not args.range:
+        args.range = DEFAULT_RANGE
     #
     # config file
     #
@@ -395,7 +422,10 @@ This file should be located at any of the following paths: %s.
                         fields=fields,
                         delay=args.delay,
                         initial_range=convert_time_interval(args.range),
-                        initial_limit=args.limit)
+                        initial_limit=args.limit,
+                        from_date=args.from_date,
+                        to_date=args.to_date)
+
             except Exception as e:
                 print e
                 time.sleep(args.delay)
@@ -407,6 +437,9 @@ This file should be located at any of the following paths: %s.
                 print_message(m, streams, fields=fields, format=args.format)
                 last_message_id = m["_id"]
                 last_timestamp = m["timestamp"]
+
+            if args.from_date or not args.tail:
+                break
 
             if last_timestamp:
                 seconds_since_last_message = max(0, (datetime.datetime.utcnow() - last_timestamp).total_seconds())

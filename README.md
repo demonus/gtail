@@ -50,6 +50,18 @@ Choose between comma separated values map and JSON output.
 
 Time range for initial fetch. Use "h" for hours, "m" for minutes, "s" or no identifier for seconds.
 
+### Dates interval
+
+`gtail --from [yyyy-MM-dd HH:mm:ss] --to [yyyy-MM-dd HH:mm:ss]`
+
+Date/time interval. Tailing is not supported for dates interval.
+
+### Tail
+
+`gtail --range [interval -f`
+
+Use flag _-f_ to keep tailing the log.
+
 ### Full usage instructions
 
 `gtail --help`

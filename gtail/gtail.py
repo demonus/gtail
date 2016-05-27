@@ -359,10 +359,10 @@ uri: http://graylog.example.com:12900
 ; optional token
 token: TOKEN
 
+This file should be located at any of the following paths: %s.
+
 To generate a token use:
 gtail --generate-token
-
-This file should be located at any of the following paths: %s.
 """ % ", ".join(DEFAULT_CONFIG_PATHS))
     parser.add_argument("--stream", dest="stream_names",
             nargs="+",

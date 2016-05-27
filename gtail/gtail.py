@@ -348,7 +348,7 @@ This file should be located at any of the following paths: %s.
                         type=check_date,
                         help="To date/timewith format yyyy-MM-dd HH:mm:ss")
     parser.add_argument("-f", dest="tail", action='store_true', default=False,
-                        help="Tail the log")
+                        help="Follow the log")
     parser.add_argument("--config", dest="config_paths",
             nargs="+",
             help="Config files. Default: " + ", ".join(DEFAULT_CONFIG_PATHS))

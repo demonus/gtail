@@ -56,11 +56,11 @@ Time range for initial fetch. Use "h" for hours, "m" for minutes, "s" or no iden
 
 Date/time interval. Tailing is not supported for dates interval.
 
-### Tail
+### Follow
 
-`gtail --range [interval -f`
+`gtail --range [interval] -f`
 
-Use flag _-f_ to keep tailing the log.
+Use flag _-f_ to keep following the log.
 
 ### Full usage instructions
 

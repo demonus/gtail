@@ -80,7 +80,7 @@ def generate_token(server_config):
 
     if not token_id:
         url += "/gtail"
-        r = requests.post(url)
+        r = requests.post(url, auth=auth, headers=headers)
         if r.status_code != 200:
             raise Exception("Could not generate a token: {0}".format(r.status_code))
         print "Generated new token"

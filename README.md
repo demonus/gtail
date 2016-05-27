@@ -90,10 +90,12 @@ appropriate.
 [server]
 ; Graylog REST API
 uri: http://graylog.example.com:12900
-; optional username and password
-username: USERNAME
-password: PASSWORD
+; optional access token
+token: TOKEN
 ```
+
+If you don't have a token, keep the value blank, and call
+`gtail --generate-token`
 
 # License
 

@@ -2,12 +2,14 @@
 #
 # Graylog Tail, an application for tailing Graylog logs
 # Brandon Vargo
-
+import getpass
 from collections import namedtuple
 import ConfigParser
 import argparse
 import datetime
 import os
+
+import re
 import requests
 import sys
 import time
@@ -52,10 +54,58 @@ def bold(text):
    reset = "\033[0;0m"
    return make_bold + str(text) + reset
 
+
+# Generates new Graylog token
+def generate_token(server_config):
+    sys.stdout.write("Username: ")
+    username = sys.stdin.readline().rstrip("\n")
+    password = getpass.getpass()
+
+    auth = (username, password)
+
+    headers = {"accept": "application/json"}
+    url = "{host}/users/{username}/tokens".format(host=server_config.uri, username=username)
+    r = requests.get(url, auth=auth, headers=headers)
+    if r.status_code != 200:
+        raise Exception("Could not get tokens: {0}".format(r.status_code))
+
+    resp = r.json()
+    token_id = None
+    if "tokens" in resp:
+        for token in resp["tokens"]:
+            if token["name"] == "gtail":
+                token_id = token["token"]
+                print "Token already exists"
+                break
+
+    if not token_id:
+        url += "/gtail"
+        r = requests.post(url)
+        if r.status_code != 200:
+            raise Exception("Could not generate a token: {0}".format(r.status_code))
+        print "Generated new token"
+        resp = r.json()
+        token_id = resp["token"]
+
+    if token_id:
+        for path in DEFAULT_CONFIG_PATHS:
+            if os.path.exists(path):
+                f = open(path, "r")
+                text = f.read()
+                f.close()
+
+                text = re.sub("(token:)(\s*)([a-zA-Z0-9]*)", "\\1 " + token_id, text)
+                f = open(path, "w")
+                f.write(text)
+                f.close()
+                print "Token saved in " + path
+                break
+
+
 # fetches the URL from the server
 def fetch(server_config, url):
-    if server_config.username and server_config.password:
-        auth = (server_config.username, server_config.password)
+    if server_config.token:
+        auth = (server_config.token, "token")
     else:
         auth = None
 
@@ -64,8 +114,8 @@ def fetch(server_config, url):
     return r
 
 def count(server_config, url):
-    if server_config.username and server_config.password:
-        auth = (server_config.username, server_config.password)
+    if server_config.token:
+        auth = (server_config.token, "token")
     else:
         auth = None
 
@@ -229,7 +279,7 @@ def print_message(message, streams=None, fields=None, format="json"):
 
 # config object and config parsing
 Config = namedtuple("Config", "server_config")
-ServerConfig = namedtuple("ServerConfig", "uri username password")
+ServerConfig = namedtuple("ServerConfig", "uri token")
 def parse_config(config_paths):
     config = ConfigParser.RawConfigParser()
     read_paths = config.read(config_paths)
@@ -243,16 +293,11 @@ def parse_config(config_paths):
         raise Exception("Could not read server uri from configuration file.")
 
     try:
-        username = config.get("server", "username")
+        token = config.get("server", "token")
     except:
-        username = None
+        token = None
 
-    try:
-        password = config.get("server", "password")
-    except:
-        password = None
-
-    return Config(ServerConfig(uri, username, password))
+    return Config(ServerConfig(uri, token))
 
 # finds all stream IDs that should be parsed
 # if a stream name cannot be found, then an Exception is raised
@@ -349,17 +394,13 @@ This file should be located at any of the following paths: %s.
                         help="To date/timewith format yyyy-MM-dd HH:mm:ss")
     parser.add_argument("-f", dest="tail", action='store_true', default=False,
                         help="Follow the log")
+    parser.add_argument("--generate-token", dest="token", action='store_true', default=False,
+                        help="Generate new Graylog token")
     parser.add_argument("--config", dest="config_paths",
             nargs="+",
             help="Config files. Default: " + ", ".join(DEFAULT_CONFIG_PATHS))
     args = parser.parse_args()
 
-    if args.range and (args.from_date or args.to_date):
-        print "error: argument --range is not allowed if --from and --to are used"
-        os._exit(1)
-
-    if not args.from_date and not args.range:
-        args.range = DEFAULT_RANGE
     #
     # config file
     #
@@ -374,6 +415,18 @@ This file should be located at any of the following paths: %s.
         print e
         return 1
     server_config = config.server_config
+
+
+    if args.token:
+        generate_token(server_config)
+        os._exit(0)
+
+    if args.range and (args.from_date or args.to_date):
+        print "error: argument --range is not allowed if --from and --to are used"
+        os._exit(1)
+
+    if not args.from_date and not args.range:
+        args.range = DEFAULT_RANGE
 
     #
     # find the stream

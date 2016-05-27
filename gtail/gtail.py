@@ -356,9 +356,11 @@ Example configuration file:
 [server]
 ; Graylog REST API
 uri: http://graylog.example.com:12900
-; optional username and password
-username: USERNAME
-password: PASSWORD
+; optional token
+token: TOKEN
+
+To generate a token use:
+gtail --generate-token
 
 This file should be located at any of the following paths: %s.
 """ % ", ".join(DEFAULT_CONFIG_PATHS))
